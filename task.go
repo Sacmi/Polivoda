@@ -11,4 +11,5 @@ type Task struct {
 	UpdatedAt time.Time          `bson:"updated_at"`
 	Text      string             `bson:"text"`
 	Completed bool               `bson:"completed"`
+	Priority  int                `bson:"priority"`
 }

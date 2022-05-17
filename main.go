@@ -12,6 +12,7 @@ import (
 	"gopkg.in/gookit/color.v1"
 	"log"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -46,7 +47,10 @@ func getAll() ([]*Task, error) {
 func filterTasks(filter interface{}) ([]*Task, error) {
 	var tasks []*Task
 
-	cur, err := collection.Find(ctx, filter)
+	findOptions := options.Find()
+	findOptions.SetSort(bson.D{{Key: "priority", Value: -1}})
+
+	cur, err := collection.Find(ctx, filter, findOptions)
 	if err != nil {
 		return tasks, err
 	}
@@ -80,6 +84,16 @@ func printTasks(tasks []*Task) {
 			color.Green.Printf("%d: %s\n", i+1, v.Text)
 		} else {
 			color.Yellow.Printf("%d: %s\n", i+1, v.Text)
+		}
+	}
+}
+
+func printTasksWithPriority(tasks []*Task) {
+	for i, v := range tasks {
+		if v.Completed {
+			color.Green.Printf("%d: %s | Приоритет: %d\n", i+1, v.Text, v.Priority)
+		} else {
+			color.Yellow.Printf("%d: %s | Приоритет: %d\n", i+1, v.Text, v.Priority)
 		}
 	}
 }
@@ -126,6 +140,17 @@ func deleteTask(text string) error {
 	return nil
 }
 
+func setPriority(text string, priority int) error {
+	filter := bson.D{primitive.E{Key: "text", Value: text}}
+
+	update := bson.D{primitive.E{Key: "$set", Value: bson.D{
+		primitive.E{Key: "priority", Value: priority},
+	}}}
+
+	t := &Task{}
+	return collection.FindOneAndUpdate(ctx, filter, update).Decode(t)
+}
+
 func main() {
 	app := &cli.App{
 		Name:  "polivoda",
@@ -161,6 +186,7 @@ func main() {
 						UpdatedAt: time.Now(),
 						Text:      str,
 						Completed: false,
+						Priority:  1,
 					}
 
 					return createTask(task)
@@ -181,7 +207,7 @@ func main() {
 						return err
 					}
 
-					printTasks(tasks)
+					printTasksWithPriority(tasks)
 					return nil
 				},
 			},
@@ -239,6 +265,26 @@ func main() {
 				Action: func(c *cli.Context) error {
 					text := c.Args().First()
 					err := deleteTask(text)
+					if err != nil {
+						return err
+					}
+
+					return nil
+				},
+			},
+			{
+				Name:        "priority",
+				Aliases:     []string{"p"},
+				Usage:       "задать приоритет задаче в списке",
+				Description: "Приоритет должен быть неотрицательным числом",
+				Action: func(c *cli.Context) error {
+					text := c.Args().First()
+					priority, errInt := strconv.Atoi(c.Args().Get(1))
+					if errInt != nil || priority < 0 {
+						return errors.New("Задан некорректный приоритет")
+					}
+
+					err := setPriority(text, priority)
 					if err != nil {
 						return err
 					}
